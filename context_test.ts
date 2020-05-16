@@ -1,4 +1,7 @@
-import { assertEquals } from "https://deno.land/std/testing/asserts.ts";
+import {
+  assertEquals,
+  assertThrowsAsync,
+} from "https://deno.land/std/testing/asserts.ts";
 import { delay } from "https://deno.land/std@0.50.0/async/delay.ts";
 import * as context from "./context.ts";
 
@@ -70,4 +73,40 @@ test("clearTimeout on context.WithTimeout", async () => {
 
   // Unexpected new context.DeadlineExceeded()
   assertEquals(tctx.error(), new context.Canceled());
+});
+
+function ctxDelay(
+  ctx: context.Context,
+  ms: number,
+): context.ContextPromise<void> {
+  return new context.ContextPromise(ctx, (resolve, reject, signal) => {
+    const id = setTimeout((): void => {
+      clearTimeout(id);
+      resolve();
+    }, ms);
+    signal.onCanceled((reason?: any) => {
+      clearTimeout(id);
+      reject(reason);
+    });
+  });
+}
+
+test("context promise", async () => {
+  const ctx = new context.Background();
+
+  await ctxDelay(ctx, 300); // expect to wait 300ms
+
+  const cctx = new context.WithTimeout(ctx, 100);
+
+  cctx.cancel();
+
+  await assertThrowsAsync(async () => {
+    await ctxDelay(cctx, 3000);
+  }, context.Canceled);
+
+  const tctx = new context.WithTimeout(ctx, 100);
+
+  await assertThrowsAsync(async () => {
+    await ctxDelay(tctx, 3000);
+  }, context.DeadlineExceeded);
 });

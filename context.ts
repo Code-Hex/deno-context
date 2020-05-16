@@ -86,3 +86,76 @@ export class WithTimeout extends WithCancel implements Context {
     );
   }
 }
+
+type PromiseResolver<T> = (value?: T | PromiseLike<T>) => void;
+type PromiseRejector<T> = (reason?: any) => void;
+type ContextPromiseExecutor<T> = (
+  resolve: PromiseResolver<T>,
+  reject: PromiseRejector<T>,
+  signal: Signal,
+) => void;
+
+export interface onCanceler {
+  onCanceled(fn: () => void): void;
+}
+
+class Signal implements onCanceler {
+  private _ctx: Context;
+  constructor(ctx: Context) {
+    this._ctx = ctx;
+  }
+  onCanceled(fn: PromiseRejector<void>): void {
+    const ctx = this._ctx;
+    const signal = ctx.doneSignal();
+    if (!signal) return;
+    if (signal.aborted) {
+      fn(ctx.error());
+      return;
+    }
+    signal.addEventListener("abort", () => fn(ctx.error()), { once: true });
+  }
+}
+
+export class ContextPromise<T> implements Promise<T> {
+  private _resolve!: PromiseResolver<T>;
+  private _reject!: PromiseRejector<T>;
+  private readonly promise: Promise<T>;
+  readonly [Symbol.toStringTag]: "ContextPromise";
+
+  constructor(ctx: Context, executor: ContextPromiseExecutor<T>) {
+    this.promise = new Promise((rs, rj) => {
+      this._resolve = rs;
+      this._reject = rj;
+      executor(rs, rj, new Signal(ctx));
+    });
+  }
+
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?:
+      | ((value: T) => TResult1 | PromiseLike<TResult1>)
+      | undefined
+      | null,
+    onrejected?:
+      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
+      | undefined
+      | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+
+  catch(onRejected?: (reason: any) => PromiseLike<never>): Promise<T> {
+    return this.promise.catch(onRejected);
+  }
+
+  finally(onfinally?: (() => void) | undefined | null): Promise<T> {
+    return this.promise.finally(onfinally);
+  }
+
+  resolve(value?: T | PromiseLike<T>): void {
+    return this._resolve(value);
+  }
+
+  reject(reason?: any): void {
+    return this._reject(reason);
+  }
+}

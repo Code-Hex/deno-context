@@ -18,13 +18,13 @@ export class DeadlineExceeded extends Error {
 // Context's methods may be called by multiple promise simultaneously.
 export interface Context {
   error(): Error | null;
-  doneSignal(): AbortSignal | null;
+  done(): AbortSignal | null;
 }
 
 export class Background implements Context {
   constructor() {}
 
-  doneSignal(): null {
+  done(): null {
     return null;
   }
 
@@ -45,7 +45,7 @@ export class WithCancel implements Context {
       }
     };
     this._error = null;
-    const doneSignal = ctx.doneSignal();
+    const doneSignal = ctx.done();
     if (doneSignal !== null) {
       const onAbort = () => this._abort.abort();
       const eType = "abort";
@@ -67,7 +67,7 @@ export class WithCancel implements Context {
     this._abort.abort();
   }
 
-  doneSignal(): AbortSignal {
+  done(): AbortSignal {
     return this._abort.signal;
   }
 }
@@ -95,18 +95,18 @@ type ContextPromiseExecutor<T> = (
   signal: Signal,
 ) => void;
 
-export interface onCanceler {
-  onCanceled(fn: () => void): void;
+export interface Signaler {
+  onSignaled(fn: PromiseRejector<void>): void;
 }
 
-class Signal implements onCanceler {
+class Signal implements Signaler {
   private _ctx: Context;
   constructor(ctx: Context) {
     this._ctx = ctx;
   }
-  onCanceled(fn: PromiseRejector<void>): void {
+  onSignaled(fn: PromiseRejector<void>): void {
     const ctx = this._ctx;
-    const signal = ctx.doneSignal();
+    const signal = ctx.done();
     if (!signal) return;
     if (signal.aborted) {
       fn(ctx.error());

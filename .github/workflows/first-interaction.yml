@@ -1,0 +1,12 @@
+name: "First Label Interaction"
+on: [issues, pull_request]
+
+jobs:
+  labeling-for-new-comer:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: Code-Hex/first-label-interaction@v1.0.1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        issue-labels: '["good first issue", "help wanted"]'
+        pr-labels: '["help wanted"]'

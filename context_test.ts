@@ -10,7 +10,7 @@ const { test } = Deno;
 test("background context", () => {
   const ctx = new context.Background();
   assertEquals(ctx.error(), null);
-  assertEquals(ctx.doneSignal(), null);
+  assertEquals(ctx.done(), null);
 });
 
 test("cancel context", async () => {
@@ -22,7 +22,7 @@ test("cancel context", async () => {
 
   [cctx, cctx2, cctx3, cctx4].forEach((c, i) => {
     assertEquals(c.error(), null, "context: " + i);
-    assertEquals(c.doneSignal().aborted, false, "context: " + i);
+    assertEquals(c.done().aborted, false, "context: " + i);
   });
 
   // cancel and will check the result of propagation
@@ -30,7 +30,7 @@ test("cancel context", async () => {
   await delay(10); // let cancellation propagate
 
   [cctx, cctx2, cctx3, cctx4].forEach((c, i) => {
-    assertEquals(c.doneSignal().aborted, true, "cancel context: " + i);
+    assertEquals(c.done().aborted, true, "cancel context: " + i);
     assertEquals(c.error(), new context.Canceled(), "cancel context: " + i);
   });
 });
@@ -47,10 +47,10 @@ test("timeout context", async () => {
   await delay(21);
 
   assertEquals(tctx.error(), new context.DeadlineExceeded());
-  assertEquals(tctx.doneSignal().aborted, true);
+  assertEquals(tctx.done().aborted, true);
 
   [cctx, cctx2, cctx3].forEach((c, i) => {
-    assertEquals(c.doneSignal().aborted, true, "timeout context: " + i);
+    assertEquals(c.done().aborted, true, "timeout context: " + i);
     assertEquals(
       c.error(),
       new context.DeadlineExceeded(),
@@ -84,7 +84,7 @@ function ctxDelay(
       clearTimeout(id);
       resolve();
     }, ms);
-    signal.onCanceled((reason?: any) => {
+    signal.onSignaled((reason?: any) => {
       clearTimeout(id);
       reject(reason);
     });

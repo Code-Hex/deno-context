@@ -1,19 +1,38 @@
-export class Canceled extends Error {
-  constructor() {
-    super("context canceled");
-    this.name = "Canceled";
-  }
-}
-
-export class DeadlineExceeded extends Error {
-  constructor() {
-    super("context deadline exceeded");
-    this.name = "DeadlineExceeded";
-  }
-}
-
-// A Context carries a deadline, a cancellation signal, and other values across
-// API boundaries.
+// Most of the descriptions in here are copied and edited from the following links.
+// https://golang.org/pkg/context
+//
+//
+// This library defines the Context type, which carries deadlines,
+// cancellation signals, and other request-scoped values across API boundaries
+// if use ContextPromise instead of Promise.
+//
+// The WithCancel and WithTimeout functions take a
+// Context (the parent) and return a derived Context (the child) and a cancel method.
+// Calling the cancel method cancels the child and its children, removes the parent's
+// reference to the child, and stops any associated timers. Failing to call the cancel
+// method leaks the child and its children until the parent is canceled or the timer
+// fires.
+//
+// Programs that use Contexts should follow these rules to keep interfaces consistent across
+// libraries. Do not store Contexts inside any classes; instead, pass a Context explicitly to
+// each function and method that needs it. The Context should be the first parameter,
+// typically named ctx:
+//
+//   function DoSomething(ctx: context.Context, arg Arg): context.ContextPromise<void> {
+//     return new context.ContextPromise(ctx, (resolve, reject) => {
+//       // ... use ctx ...
+//     }
+//   }
+//
+//   ... or
+//
+//   function DoSomething(ctx: context.Context, arg Arg): Promise<void> {
+//     return new Promise((resolve, reject) => {
+//       // ... use ctx ...
+//     }
+//   }
+//
+// Do not pass a null Context, even if a function permits it.
 //
 // Context's methods may be called by multiple promise simultaneously.
 export interface Context {
@@ -22,6 +41,9 @@ export interface Context {
   value(key: any): any | null;
 }
 
+// Background returns a non-nil, empty Context. It is never canceled, has
+// no values, and has no deadline. It is typically used by the main function,
+// initialization, and tests.
 export class Background implements Context {
   constructor() {}
 
@@ -38,6 +60,10 @@ export class Background implements Context {
   }
 }
 
+// WithValue returns a copy of parent in which the value associated with key is val.
+//
+// Use context Values only for request-scoped data that transits processes and APIs,
+// not for passing optional parameters to functions.
 export class WithValue implements Context {
   private _parent: Context;
   private _key: any;
@@ -76,6 +102,10 @@ export class WithValue implements Context {
   }
 }
 
+// WithCancel returns a copy of parent with a new done signal.
+//
+// The returned context's done signal is signaled when the cancel method is called or
+// when the parent context's done signal is signaled, whichever happens first.
 export class WithCancel implements Context {
   private _parent: Context;
   protected _signal: CancelSignal;
@@ -135,6 +165,14 @@ export class WithCancel implements Context {
   }
 }
 
+// WithTimeout returns a copy of the parent context with the timeout
+// adjusted to be no later than “ms". If the parent's timeout is already
+// earlier than “ms", WithTimeout(parent, ms) is semantically equivalent
+// to parent.
+//
+// The returned context's done signal is signaled when the timeout expires,
+// when the returned cancel method is called, or when the parent context's
+// done signal is signaled, whichever happens first.
 export class WithTimeout extends WithCancel implements Context {
   constructor(ctx: Context, ms: number) {
     super(ctx);
@@ -145,6 +183,23 @@ export class WithTimeout extends WithCancel implements Context {
   }
 }
 
+// Canceled is the error happened by Context.error() when the context is canceled.
+export class Canceled extends Error {
+  constructor() {
+    super("context canceled");
+    this.name = "Canceled";
+  }
+}
+
+// DeadlineExceeded is the error returned by Context.error() when the context's
+// deadline passes.
+export class DeadlineExceeded extends Error {
+  constructor() {
+    super("context deadline exceeded");
+    this.name = "DeadlineExceeded";
+  }
+}
+
 type PromiseResolver<T> = (value?: T | PromiseLike<T>) => void;
 type PromiseRejector<T> = (reason?: any) => void;
 type ContextPromiseExecutor<T> = (
@@ -152,6 +207,10 @@ type ContextPromiseExecutor<T> = (
   reject: PromiseRejector<T>,
 ) => void;
 
+// "done signal" essentially refers to this CancelSignal class.
+//
+// This class can be passed as an AbortSignal to the expected parameter
+// as input.
 class CancelSignal implements AbortSignal {
   private _error: Error | null;
   private _abort: AbortController;
@@ -162,18 +221,23 @@ class CancelSignal implements AbortSignal {
     this._abort = new AbortController();
   }
 
-  // new method
+  // Always returns null, unless the cancel method is called.
   error(): Error | null {
     return this._error;
   }
 
-  // new method
+  // Passes an error when calling this cancel method.
+  // The error passed here is expected to be Canceled or DeadlineExceeded.
   cancel(error: Error) {
     this._error = error;
     this._abort.abort();
   }
 
-  // new method
+  // The specified callback will be executed only once in the event that is
+  // emitted when the cancel method is called.
+  //
+  // If the cancel method has already been called, the passed callback will
+  // be executed immediately.
   onCanceled(fn: PromiseRejector<void>): void {
     // It's already been cancelled.
     if (this.aborted) {
@@ -217,6 +281,10 @@ class CancelSignal implements AbortSignal {
   }
 }
 
+// ContextPromise is automatically rejected when the Context done signal is signaled.
+//
+// When rejected, an error, either Canceled or DeadlineExceeded, is passed to indicate
+// why it was canceled.
 export class ContextPromise<T> implements Promise<T> {
   private _resolve!: PromiseResolver<T>;
   private _reject!: PromiseRejector<T>;

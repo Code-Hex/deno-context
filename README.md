@@ -1,6 +1,6 @@
 # deno-context
 
-![.github/workflows/test.yml](https://github.com/Code-Hex/context-promise/workflows/.github/workflows/test.yml/badge.svg)
+![.github/workflows/test.yml](https://github.com/Code-Hex/deno-context/workflows/.github/workflows/test.yml/badge.svg)
 
 🦕【Deno】Propagate deadlines, a cancellation and other request-scoped values to multiple promise. The behaviour is like Go's context.
 

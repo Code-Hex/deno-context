@@ -1,4 +1,4 @@
-# context-promise
+# deno-context
 
 ![.github/workflows/test.yml](https://github.com/Code-Hex/context-promise/workflows/.github/workflows/test.yml/badge.svg)
 

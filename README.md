@@ -6,7 +6,7 @@
 
 ## Synopsis
 
-This code cancels the Promise process due to a timeout.
+This example passes a context with a timeout to tell a blocking methods that it should abandon its work after the timeout elapses.
 
 ```typescript
 import * as context from "./context.ts";
@@ -33,9 +33,9 @@ const tctx = new context.WithTimeout(ctx, 1000); // timeout by 1000ms
 
 try {
   await Promise.race([
-    tooSlow(tctx, 3000),
-    tooSlow(tctx, 4000),
-    tooSlow(tctx, 5000),
+    tooSlow(tctx, 3000), // take 3s
+    tooSlow(tctx, 4000), // take 4s
+    tooSlow(tctx, 5000), // take 5s
   ]);
 } catch (e) {
   // Get this error by 1000ms.
@@ -83,9 +83,7 @@ typically named ctx:
   }
 ```
 
-## Each feature
-
-### context.Background
+## context.Background
 
 ```typescript
 const ctx = new context.Background();
@@ -95,7 +93,7 @@ Background returns a non-nil, empty Context. It is never canceled, has
 no values, and has no deadline. It is typically used by the main function,
 initialization, and tests.
 
-### context.WithValue
+## context.WithValue
 
 ```typescript
 const ctx = new context.Background();
@@ -109,7 +107,6 @@ not for passing optional parameters to functions.
 
 <details>
  <summary>Example</summary>
-
 
 ```typescript
 const ctx = new context.Background();
@@ -132,7 +129,7 @@ f(vctx, "color");
 
 </details>
 
-### context.WithCancel
+## context.WithCancel
 
 ```typescript
 const ctx = new context.Background();
@@ -175,7 +172,33 @@ try {
 
 </details>
 
-### context.WithTimeout
+### Callback to be performed on cancel
+
+The specified callback will be executed only once in the event that is emitted when the cancel method is called.
+  
+If the cancel method has already been called, the passed callback will be executed immediately.
+
+<details>
+ <summary>Example</summary>
+
+```typescript
+import * as context from "./context.ts";
+
+const ctx = new context.Background();
+const cctx = new context.WithCancel(ctx);
+
+cctx.done().onCanceled((reason?: any) => {
+  console.log("canceled reason:", reason)
+})
+
+console.log("start cancel")
+cctx.cancel();
+console.log("canceled")
+```
+
+</details>
+
+## context.WithTimeout
 
 ```typescript
 const ctx = new context.Background();
@@ -190,4 +213,3 @@ to parent.
 The returned context's done signal is signaled when the timeout expires,
 when the returned cancel method is called, or when the parent context's
 done signal is signaled, whichever happens first.
-

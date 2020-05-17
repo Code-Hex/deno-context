@@ -3,8 +3,7 @@
 //
 //
 // This library defines the Context type, which carries deadlines,
-// cancellation signals, and other request-scoped values across API boundaries
-// if use ContextPromise instead of Promise.
+// cancellation signals, and other request-scoped values across API boundaries.
 //
 // The WithCancel and WithTimeout functions take a
 // Context (the parent) and return a derived Context (the child) and a cancel method.
@@ -151,8 +150,6 @@ export class WithCancel implements Context {
   }
 
   cancel(): void {
-    // In order to properly propagation the error, the order of execution
-    // here must be observed. Set the error before aborting.
     this._signal.cancel(new Canceled());
   }
 
@@ -229,6 +226,8 @@ class CancelSignal implements AbortSignal {
   // Passes an error when calling this cancel method.
   // The error passed here is expected to be Canceled or DeadlineExceeded.
   cancel(error: Error) {
+    // In order to properly propagation the error, the order of execution
+    // here must be observed. Set the error before aborting.
     this._error = error;
     this._abort.abort();
   }

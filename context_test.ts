@@ -243,7 +243,7 @@ function ctxDelay(
       clearTimeout(id);
       resolve();
     }, ms);
-    ctx.done()?.onSignaled((reason?: any) => {
+    ctx.done()?.onCanceled((reason?: any) => {
       clearTimeout(id);
     });
   });

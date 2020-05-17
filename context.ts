@@ -109,8 +109,8 @@ export class WithCancel implements Context {
       // the parent context (which has the parentSignal)
       // will must have an error.
       const handler = () => this._signal.cancel(parentSignal.error()!);
-      parentSignal.onSignaled(handler);
-      this._signal.onSignaled(() => {
+      parentSignal.onCanceled(handler);
+      this._signal.onCanceled(() => {
         parentSignal.removeEventListener("abort", handler);
       });
     }
@@ -141,7 +141,7 @@ export class WithTimeout extends WithCancel implements Context {
     const id = setTimeout(() => {
       this._signal.cancel(new DeadlineExceeded());
     }, ms);
-    this._signal.onSignaled(() => clearTimeout(id));
+    this._signal.onCanceled(() => clearTimeout(id));
   }
 }
 
@@ -174,7 +174,7 @@ class CancelSignal implements AbortSignal {
   }
 
   // new method
-  onSignaled(fn: PromiseRejector<void>): void {
+  onCanceled(fn: PromiseRejector<void>): void {
     // It's already been cancelled.
     if (this.aborted) {
       fn(this._error);
@@ -229,7 +229,7 @@ export class ContextPromise<T> implements Promise<T> {
       this._reject = rj;
       executor(rs, rj);
     });
-    ctx.done()?.onSignaled((reason?: any) => {
+    ctx.done()?.onCanceled((reason?: any) => {
       this.reject(reason);
     });
   }

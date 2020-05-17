@@ -18,7 +18,7 @@ export class DeadlineExceeded extends Error {
 // Context's methods may be called by multiple promise simultaneously.
 export interface Context {
   error(): Error | null;
-  done(): AbortSignal | null;
+  done(): CancelSignal | null;
   value(key: any): any | null;
 }
 
@@ -64,7 +64,7 @@ export class WithValue implements Context {
     return this._parent.error();
   }
 
-  done(): AbortSignal | null {
+  done(): CancelSignal | null {
     return this._parent.done();
   }
 
@@ -78,42 +78,56 @@ export class WithValue implements Context {
 
 export class WithCancel implements Context {
   private _parent: Context;
-  protected _abort: AbortController;
-  protected _error: Error | null;
+  protected _signal: CancelSignal;
 
   constructor(ctx: Context) {
     this._parent = ctx;
-    this._abort = new AbortController();
-    this._abort.signal.onabort = () => {
-      if (this._error === null) {
-        this._error = this._parent.error();
-      }
-    };
-    this._error = null;
-    const doneSignal = this._parent.done();
-    if (doneSignal !== null) {
-      const onAbort = () => this._abort.abort();
-      const eType = "abort";
-      doneSignal.addEventListener(eType, onAbort, { once: true });
-      this._abort.signal.addEventListener(eType, () => {
-        doneSignal.removeEventListener(eType, onAbort);
-      }, { once: true });
+    this._signal = new CancelSignal();
+    const parentSignal = this._parent.done();
+    if (parentSignal !== null) {
+      //
+      // Signal propagation is thus in a hierarchical state.
+      //
+      // +------------+
+      // | background |
+      // +------------+
+      //        |         +---------+
+      //        +-------->+  child  |
+      //        |         +---------+
+      //        |         +---------+        +---------+
+      //        +-------->+  child  +------->+  child  |
+      //                  +---------+        +---------+
+      //                       |             +---------+
+      //                       +------------>+  child  |
+      //                                     +---------+
+      //
+      // The fact that parentSignal is not null means that
+      // the parent context is not a background. The root
+      // is always the background context.
+      //
+      // When parentSignal observes an abort event,
+      // the parent context (which has the parentSignal)
+      // will must have an error.
+      const handler = () => this._signal.cancel(parentSignal.error()!);
+      parentSignal.onCanceled(handler);
+      this._signal.onCanceled(() => {
+        parentSignal.removeEventListener("abort", handler);
+      });
     }
   }
 
   error(): Error | null {
-    return this._error;
+    return this._signal.error();
   }
 
   cancel(): void {
     // In order to properly propagation the error, the order of execution
     // here must be observed. Set the error before aborting.
-    this._error = new Canceled();
-    this._abort.abort();
+    this._signal.cancel(new Canceled());
   }
 
-  done(): AbortSignal {
-    return this._abort.signal;
+  done(): CancelSignal {
+    return this._signal;
   }
 
   value(key: any): any | null {
@@ -125,14 +139,9 @@ export class WithTimeout extends WithCancel implements Context {
   constructor(ctx: Context, ms: number) {
     super(ctx);
     const id = setTimeout(() => {
-      this._error = new DeadlineExceeded();
-      this._abort.abort();
+      this._signal.cancel(new DeadlineExceeded());
     }, ms);
-    this._abort.signal.addEventListener(
-      "abort",
-      () => clearTimeout(id),
-      { once: true },
-    );
+    this._signal.onCanceled(() => clearTimeout(id));
   }
 }
 
@@ -141,27 +150,70 @@ type PromiseRejector<T> = (reason?: any) => void;
 type ContextPromiseExecutor<T> = (
   resolve: PromiseResolver<T>,
   reject: PromiseRejector<T>,
-  signal: Signal,
 ) => void;
 
-export interface Signaler {
-  onSignaled(fn: PromiseRejector<void>): void;
-}
+class CancelSignal implements AbortSignal {
+  private _error: Error | null;
+  private _abort: AbortController;
+  readonly [Symbol.toStringTag]: "CancelSignal";
 
-class Signal implements Signaler {
-  private _ctx: Context;
-  constructor(ctx: Context) {
-    this._ctx = ctx;
+  constructor() {
+    this._error = null;
+    this._abort = new AbortController();
   }
-  onSignaled(fn: PromiseRejector<void>): void {
-    const ctx = this._ctx;
-    const signal = ctx.done();
-    if (!signal) return;
-    if (signal.aborted) {
-      fn(ctx.error());
+
+  // new method
+  error(): Error | null {
+    return this._error;
+  }
+
+  // new method
+  cancel(error: Error) {
+    this._error = error;
+    this._abort.abort();
+  }
+
+  // new method
+  onCanceled(fn: PromiseRejector<void>): void {
+    // It's already been cancelled.
+    if (this.aborted) {
+      fn(this._error);
       return;
     }
-    signal.addEventListener("abort", () => fn(ctx.error()), { once: true });
+    this.addEventListener("abort", () => fn(this._error), { once: true });
+  }
+
+  // readonly on AbortSignal implements
+  get aborted(): boolean {
+    return this._abort.signal.aborted;
+  }
+
+  set onabort(c: ((this: AbortSignal, ev: Event) => any) | null) {
+    this._abort.signal.onabort = c;
+  }
+
+  get onabort(): ((this: AbortSignal, ev: Event) => any) | null {
+    return this._abort.signal.onabort;
+  }
+
+  dispatchEvent(event: Event): boolean {
+    return this._abort.signal.dispatchEvent(event);
+  }
+
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    return this._abort.signal.addEventListener(type, listener, options);
+  }
+
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ): void {
+    return this._abort.signal.removeEventListener(type, listener, options);
   }
 }
 
@@ -175,7 +227,10 @@ export class ContextPromise<T> implements Promise<T> {
     this.promise = new Promise((rs, rj) => {
       this._resolve = rs;
       this._reject = rj;
-      executor(rs, rj, new Signal(ctx));
+      executor(rs, rj);
+    });
+    ctx.done()?.onCanceled((reason?: any) => {
+      this.reject(reason);
     });
   }
 

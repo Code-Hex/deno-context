@@ -199,7 +199,7 @@ test("timeout context", async () => {
   const tctx = new context.WithTimeout(ctx, 20); // 20ms
   const cctx = new context.WithCancel(tctx);
   const cctx2 = new context.WithCancel(cctx);
-  const cctx3 = new context.WithCancel(cctx2);
+  const tctx2 = new context.WithTimeout(cctx2, 100); // 100ms
 
   // wait 21ms
   // context canceling to children by context.WithTimeout(ctx, 20)
@@ -208,7 +208,7 @@ test("timeout context", async () => {
   assertEquals(tctx.error(), new context.DeadlineExceeded());
   assertEquals(tctx.done().aborted, true);
 
-  [cctx, cctx2, cctx3].forEach((c, i) => {
+  [cctx, cctx2, tctx2].forEach((c, i) => {
     assertEquals(c.done().aborted, true, "timeout context: " + i);
     assertEquals(
       c.error(),

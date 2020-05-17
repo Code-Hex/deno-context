@@ -3,8 +3,7 @@
 //
 //
 // This library defines the Context type, which carries deadlines,
-// cancellation signals, and other request-scoped values across API boundaries
-// if use ContextPromise instead of Promise.
+// cancellation signals, and other request-scoped values across API boundaries.
 //
 // The WithCancel and WithTimeout functions take a
 // Context (the parent) and return a derived Context (the child) and a cancel method.

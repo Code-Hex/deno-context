@@ -19,6 +19,7 @@ export class DeadlineExceeded extends Error {
 export interface Context {
   error(): Error | null;
   done(): AbortSignal | null;
+  value(key: any): any | null;
 }
 
 export class Background implements Context {
@@ -31,21 +32,65 @@ export class Background implements Context {
   error(): null {
     return null;
   }
+
+  value(_: any): any | null {
+    return null;
+  }
+}
+
+export class WithValue implements Context {
+  private _parent: Context;
+  private _key: any;
+  private _val: any;
+  constructor(parent: Context, key: any, val: any) {
+    if (key === undefined || key === null) {
+      throw new Error("undefined or null key");
+    }
+    if (key instanceof Array) {
+      throw new Error("array key");
+    }
+    if (typeof key === "object") {
+      throw new Error("object key");
+    }
+    if (typeof key === "function") {
+      throw new Error("function key");
+    }
+    this._parent = parent;
+    this._key = key;
+    this._val = val;
+  }
+
+  error(): Error | null {
+    return this._parent.error();
+  }
+
+  done(): AbortSignal | null {
+    return this._parent.done();
+  }
+
+  value(key: any): any | null {
+    if (this._key === key) {
+      return this._val;
+    }
+    return this._parent.value(key);
+  }
 }
 
 export class WithCancel implements Context {
+  private _parent: Context;
   protected _abort: AbortController;
   protected _error: Error | null;
 
   constructor(ctx: Context) {
+    this._parent = ctx;
     this._abort = new AbortController();
     this._abort.signal.onabort = () => {
       if (this._error === null) {
-        this._error = ctx.error();
+        this._error = this._parent.error();
       }
     };
     this._error = null;
-    const doneSignal = ctx.done();
+    const doneSignal = this._parent.done();
     if (doneSignal !== null) {
       const onAbort = () => this._abort.abort();
       const eType = "abort";
@@ -69,6 +114,10 @@ export class WithCancel implements Context {
 
   done(): AbortSignal {
     return this._abort.signal;
+  }
+
+  value(key: any): any | null {
+    return this._parent.value(key);
   }
 }
 

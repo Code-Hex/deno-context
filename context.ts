@@ -101,7 +101,7 @@ export class WithCancel implements Context {
       //                       +------------>+  child  |
       //                                     +---------+
       //
-      // The fact that parentSignal is not null means that 
+      // The fact that parentSignal is not null means that
       // the parent context is not a background. The root
       // is always the background context.
       //
@@ -155,7 +155,7 @@ type ContextPromiseExecutor<T> = (
 class CancelSignal implements AbortSignal {
   private _error: Error | null;
   private _abort: AbortController;
-  readonly [Symbol.toStringTag]: "Signal";
+  readonly [Symbol.toStringTag]: "CancelSignal";
 
   constructor() {
     this._error = null;
@@ -175,6 +175,7 @@ class CancelSignal implements AbortSignal {
 
   // new method
   onSignaled(fn: PromiseRejector<void>): void {
+    // It's already been cancelled.
     if (this.aborted) {
       fn(this._error);
       return;
@@ -227,6 +228,9 @@ export class ContextPromise<T> implements Promise<T> {
       this._resolve = rs;
       this._reject = rj;
       executor(rs, rj);
+    });
+    ctx.done()?.onSignaled((reason?: any) => {
+      this.reject(reason);
     });
   }
 

@@ -238,14 +238,13 @@ function ctxDelay(
   ctx: context.Context,
   ms: number,
 ): context.ContextPromise<void> {
-  return new context.ContextPromise(ctx, (resolve, reject) => {
+  return new context.ContextPromise(ctx, (resolve) => {
     const id = setTimeout((): void => {
       clearTimeout(id);
       resolve();
     }, ms);
     ctx.done()?.onSignaled((reason?: any) => {
       clearTimeout(id);
-      reject(reason);
     });
   });
 }

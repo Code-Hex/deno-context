@@ -16,6 +16,9 @@ jobs:
     - name: Install Deno
       run: |
         curl -fsSL https://deno.land/x/install/install.sh | sh
+    - name: Check fmt
+      run: |
+        /home/runner/.deno/bin/deno fmt --check
     - name: Test
       run: |
         /home/runner/.deno/bin/deno test
